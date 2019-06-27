@@ -10,24 +10,48 @@ let SCREEN_WIDTH = UIScreen.main.bounds.size.width
 let SCREEN_HEIGHT = UIScreen.main.bounds.size.height
 let IS_LARGE_SCREEN = IS_IPHONE && max(SCREEN_WIDTH, SCREEN_HEIGHT) >= 736.0
 
-final class ViewController: UIViewController {
+final class ViewController: UIViewController, UIScrollViewDelegate {
 	var sourceImage: UIImage?
 	var delayedAction: IIDelayedAction?
-	var blurAmount: Float = 50
+	var blurAmount: Float = 0
 	let stockImages = Bundle.main.urls(forResourcesWithExtension: "jpg", subdirectory: "Bundled Photos")!
 	lazy var randomImageIterator: AnyIterator<URL> = self.stockImages.uniqueRandomElement()
-
+	var isFilterAdded:Bool = true
 	lazy var imageView = with(UIImageView()) {
 		$0.image = UIImage(color: .black, size: view.frame.size)
 		$0.contentMode = .scaleAspectFill
 		$0.clipsToBounds = true
 		$0.frame = view.bounds
-	}
+		let doubleTap = UITapGestureRecognizer(target: self, action: #selector(showFilter))
+		doubleTap.numberOfTouchesRequired = 1
+		doubleTap.numberOfTapsRequired = 2
+		$0.addGestureRecognizer(doubleTap)
 
+	}
+	lazy var scrollView = with(UIScrollView()) {
+		
+		$0.delegate = self
+		$0.frame = view.frame
+		$0.alwaysBounceVertical = false
+		$0.alwaysBounceHorizontal = false
+		$0.showsVerticalScrollIndicator = true
+		$0.flashScrollIndicators()
+		$0.minimumZoomScale = 1.0
+		$0.maximumZoomScale = 10.0
+	}
+	lazy var filtersScrollView = with(UIScrollView()) {
+		$0.delegate = self
+		$0.frame = view.frame
+		$0.backgroundColor = .gray
+		$0.alwaysBounceVertical = false
+		$0.alwaysBounceHorizontal = false
+		$0.showsHorizontalScrollIndicator = true
+		$0.flashScrollIndicators()
+	}
 	lazy var slider = with(UISlider()) {
 		let SLIDER_MARGIN: CGFloat = 120
 		$0.frame = CGRect(x: 0, y: 0, width: view.frame.size.width - SLIDER_MARGIN, height: view.frame.size.height)
-		$0.minimumValue = 10
+		$0.minimumValue = 0
 		$0.maximumValue = 100
 		$0.value = blurAmount
 		$0.isContinuous = true
@@ -58,13 +82,17 @@ final class ViewController: UIViewController {
 
 	override func viewDidLoad() {
 		super.viewDidLoad()
-
 		// This is to ensure that it always ends up with the current blur amount when the slider stops
 		// since we're using `DispatchQueue.global().async` the order of events aren't serial
 		delayedAction = IIDelayedAction({}, withDelay: 0.2)
 		delayedAction?.onMainThread = false
 
-		view.addSubview(imageView)
+		view.addSubview(scrollView)
+		scrollView.addSubview(imageView)
+
+		let tapGesture = UILongPressGestureRecognizer(target: self, action: #selector(tapGesture(gesture:)))
+		imageView.addGestureRecognizer(tapGesture)
+		imageView.isUserInteractionEnabled = true
 
 		let TOOLBAR_HEIGHT: CGFloat = 80 + window.safeAreaInsets.bottom
 		let toolbar = UIToolbar(frame: CGRect(x: 0, y: view.frame.size.height - TOOLBAR_HEIGHT, width: view.frame.size.width, height: TOOLBAR_HEIGHT))
@@ -99,8 +127,97 @@ final class ViewController: UIViewController {
 
 		// Important that this is here at the end for the fading to work
 		randomImage()
-	}
+		
+		let SCROLL_HEIGHT: CGFloat = 80 + window.safeAreaInsets.bottom
+		filtersScrollView.frame = CGRect(x: 0, y: view.frame.size.height - SCROLL_HEIGHT, width: view.frame.size.width, height: SCROLL_HEIGHT)
+		view.addSubview(filtersScrollView)
 
+		self.addFilter()
+		
+	}
+	func addFilter () {
+		var CIFilterNames = [
+			"CIPhotoEffectChrome",
+			"CIPhotoEffectFade",
+			"CIPhotoEffectInstant",
+			"CIPhotoEffectNoir",
+			"CIPhotoEffectProcess",
+			"CIPhotoEffectTonal",
+			"CIPhotoEffectTransfer",
+			"CISepiaTone"
+		]
+		
+		// Variables for setting the Font Buttons
+		var xCoord: CGFloat = 5
+		let yCoord: CGFloat = 5
+		let buttonWidth: CGFloat = 70
+		let buttonHeight: CGFloat = 70
+		let gapBetweenButtons: CGFloat = 5
+		// Items Counter
+		var itemCount = 0
+		
+		// Loop for creating buttons ------------------------------------------------------------
+		for index in 0..<CIFilterNames.count {
+			itemCount = index
+			
+			// Button properties
+			let filterButton = UIButton(type: .custom)
+			filterButton.frame = CGRect(x: xCoord, y: yCoord, width: buttonWidth, height: buttonHeight)
+			filterButton.tag = itemCount
+			filterButton.addTarget(self, action: #selector(filterButtonTapped(sender:)), for: .touchUpInside)
+			filterButton.layer.cornerRadius = 6
+			filterButton.clipsToBounds = true
+			
+			//			// Create filters for each button
+			let ciContext = CIContext(options: nil)
+			let coreImage = CIImage(image: imageView.image!)
+			let filter = CIFilter(name: "\(CIFilterNames[index])" )
+			filter!.setDefaults()
+			filter!.setValue(coreImage, forKey: kCIInputImageKey)
+			let filteredImageData = filter!.value(forKey: kCIOutputImageKey) as! CIImage
+			let filteredImageRef = ciContext.createCGImage(filteredImageData, from: filteredImageData.extent)
+			let imageForButton = UIImage(cgImage: filteredImageRef!);
+			
+			// Assign filtered image to the button
+			filterButton.setBackgroundImage(imageForButton, for: .normal)
+			
+			// Add Buttons in the Scroll View
+			xCoord +=  buttonWidth + gapBetweenButtons
+			filtersScrollView.addSubview(filterButton)
+		}
+		
+		filtersScrollView.contentSize = CGSize(width: buttonWidth * CGFloat(itemCount+2), height: yCoord)
+
+	}
+	@objc
+	func showFilter () {
+		
+		if isFilterAdded {
+			filtersScrollView.isHidden = true
+			isFilterAdded = false
+			return
+		}
+		isFilterAdded = true
+		filtersScrollView.isHidden = false
+	}
+	
+	// FILTER BUTTON ACTION
+	@objc
+	func filterButtonTapped(sender: UIButton) {
+		let button = sender as UIButton
+		
+		imageView.image = button.backgroundImage(for: UIControl.State.normal)
+		sourceImage = imageView.toImage()
+
+	}
+	
+	@objc
+	func tapGesture(gesture: UIGestureRecognizer) {
+		if let image = imageView.image {
+			let vc = UIActivityViewController(activityItems: [image], applicationActivities: [])
+			present(vc, animated: true)
+		}
+	}
 	@objc
 	func pickImage() {
 		let fdTake = FDTakeController()
@@ -131,6 +248,10 @@ final class ViewController: UIViewController {
 		}
 	}
 
+	func viewForZooming(in scrollView: UIScrollView) -> UIView? {
+		return imageView
+	}
+	
 	func updateImageDebounced() {
 		performSelector(inBackground: #selector(updateImage), with: IS_IPAD ? 0.1 : 0.06)
 	}
