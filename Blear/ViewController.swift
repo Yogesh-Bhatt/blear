@@ -127,10 +127,6 @@ final class ViewController: UIViewController, UIScrollViewDelegate {
 
 		// Important that this is here at the end for the fading to work
 		randomImage()
-		
-		let SCROLL_HEIGHT: CGFloat = 80 + window.safeAreaInsets.bottom
-		filtersScrollView.frame = CGRect(x: 0, y: view.frame.size.height - SCROLL_HEIGHT, width: view.frame.size.width, height: SCROLL_HEIGHT)
-		view.addSubview(filtersScrollView)
 
 		self.addFilter()
 		
@@ -186,6 +182,10 @@ final class ViewController: UIViewController, UIScrollViewDelegate {
 			filtersScrollView.addSubview(filterButton)
 		}
 		
+		let SCROLL_HEIGHT: CGFloat = 80 + window.safeAreaInsets.bottom
+		filtersScrollView.frame = CGRect(x: 0, y: view.frame.size.height - SCROLL_HEIGHT, width: view.frame.size.width, height: SCROLL_HEIGHT)
+		view.addSubview(filtersScrollView)
+
 		filtersScrollView.contentSize = CGSize(width: buttonWidth * CGFloat(itemCount+2), height: yCoord)
 
 	}
@@ -312,7 +312,10 @@ final class ViewController: UIViewController, UIScrollViewDelegate {
 		imageView.image = image
 		sourceImage = imageView.toImage()
 		updateImageDebounced()
-
+		
+		filtersScrollView.removeFromSuperview()
+		addFilter()
+		
 		// The delay here is important so it has time to blur the image before we start fading
 		UIView.animate(
 			withDuration: 0.6,
